@@ -168,7 +168,7 @@
     $('ry').textContent = fmt(dev.rotation.y, 2);
     $('rz').textContent = fmt(dev.rotation.z, 2);
     $('ra').textContent = dev.angle.toFixed(2);
-    $('fit-method').textContent = reg.method === 'vertex' ? 'Exact vertex correspondence' : 'Surface matching (ICP)';
+    $('fit-method').textContent = reg.method === 'vertex' ? 'Vertex correspondence' : 'Surface matching (ICP)';
     $('fit-rms').textContent = `${reg.rms.toFixed(4)} mm RMS · ${reg.maxError.toFixed(4)} mm max`;
     $('point-from').textContent = coords(dev.from);
     $('point-to').textContent = coords(dev.to);

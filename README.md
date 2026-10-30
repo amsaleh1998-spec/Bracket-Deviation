@@ -28,7 +28,8 @@ numbers work offline.
    - If both files list the same triangles in the same order (the usual case
      when the planning software exports the same bracket model at two
      positions), vertices correspond one to one and a least-squares fit
-     (Horn's quaternion method) gives the exact transform.
+     (Horn's quaternion method) gives the transform directly. It is exact for
+     an exact export and tolerates small rounding differences between files.
    - Otherwise the surfaces are matched with ICP (iterative closest point),
      started from several initial poses. If the bracket fits almost equally
      well in two orientations (a near-symmetric bracket), the smaller rotation

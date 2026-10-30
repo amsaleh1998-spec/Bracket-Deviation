@@ -360,7 +360,7 @@
         if (d2 > max) max = d2;
       }
       const rms = Math.sqrt(sum / (moved.length / 3));
-      if (rms <= 1e-4 * scale) {
+      if (rms <= 0.01 * scale) {
         return { R: fit.R, t: fit.t, rms, maxError: Math.sqrt(max), method: 'vertex', warnings };
       }
     }

@@ -323,7 +323,7 @@ pre {
           <p><strong>Linear.</strong> ΔX, ΔY, ΔZ are the placed position minus the reference position of the chosen point, in the coordinate system of your planning software (assumed to be millimetres).</p>
           <p><strong>Angular.</strong> The rotation from the reference to the placed bracket is split into rotations about the fixed X axis, then Y, then Z (R = Rz·Ry·Rx). Positive angles follow the right-hand rule: counter-clockwise when looking from the positive end of the axis toward the origin. Total rotation is the single angle about the axis below.</p>
           <p><strong>Clinical reading.</strong> If your software's axes line up with the tooth (X mesiodistal, Y occlusogingival, Z buccolingual), rotation about X is torque, about Y is in/out rotation, and about Z is tip. With arch-wide axes this holds only roughly, and less so on teeth far from the midline.</p>
-          <p><strong>Matching.</strong> If both STLs list the same triangles in the same order, the transform is solved directly and is exact. Otherwise the surfaces are matched with ICP (iterative closest point), which stays reliable as long as both files are the same bracket model.</p>
+          <p><strong>Matching.</strong> If both STLs list the same triangles in the same order, the transform is solved directly from matching vertices (exact when the export is exact). Otherwise the surfaces are matched with ICP (iterative closest point), which stays reliable as long as both files are the same bracket model.</p>
           <dl class="fit">
             <dt>Rotation axis</dt><dd id="axis">—</dd>
           </dl>

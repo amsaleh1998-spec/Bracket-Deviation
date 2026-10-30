@@ -138,3 +138,13 @@ test('deviation depends on the chosen reference point, rotation does not', () =>
   assert.notDeepEqual(a.delta, b.delta);
   assert.deepEqual(a.rotation, b.rotation);
 });
+
+test('same vertex order with small vertex noise still uses vertex correspondence', () => {
+  const { reference, placed, expected } = makeSampleCase();
+  // 10 µm of deterministic noise, identical for every copy of a shared vertex
+  const noisy = placed.map((v, i) => v + 0.01 * Math.sin(1000 * reference[i - (i % 3)] + 7 * (i % 3)));
+  const reg = M.register(reference, noisy);
+  assert.equal(reg.method, 'vertex');
+  const dev = M.computeDeviation(reg.R, reg.t, M.surfaceCentroid(reference));
+  checkDeviation(dev, expected, 0.005, 0.2);
+});
