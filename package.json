@@ -1,0 +1,11 @@
+{
+  "name": "bracket-deviation",
+  "version": "0.1.0",
+  "description": "Linear and angular deviation between a reference and a placed orthodontic bracket STL",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "samples": "node scripts/make-samples.js"
+  },
+  "license": "UNLICENSED"
+}

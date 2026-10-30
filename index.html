@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bracket Deviation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an instrument panel. Inputs and the numeric report on the left, the 3D overlay on the right; one column on phones. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #18222d;
+  --muted: #5a6776;
+  --line: #d3dae2;
+  --accent: #2c5a86;
+  --ref: #5b84b1;
+  --placed: #c47718;
+  --axis-x: #c4473b;
+  --axis-y: #2f8a4c;
+  --axis-z: #3765c4;
+  --warn-ink: #8a5300;
+  --warn-bg: #fbf1df;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #161d25; --ink: #e3e9ef; --muted: #93a2b2; --line: #2a3542;
+    --accent: #8db6de; --ref: #7fa6d0; --placed: #e39c48;
+    --axis-x: #ec7b70; --axis-y: #6cc487; --axis-z: #84a5f2;
+    --warn-ink: #f0c178; --warn-bg: #2b2213;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #161d25; --ink: #e3e9ef; --muted: #93a2b2; --line: #2a3542;
+  --accent: #8db6de; --ref: #7fa6d0; --placed: #e39c48;
+  --axis-x: #ec7b70; --axis-y: #6cc487; --axis-z: #84a5f2;
+  --warn-ink: #f0c178; --warn-bg: #2b2213;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 40px;
+}
+.page { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h1 {
+  font: 600 1.9rem/1.1 var(--font-display);
+  letter-spacing: 0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+header p { margin: 0; color: var(--muted); max-width: 62ch; }
+h2 {
+  font: 600 0.8rem/1.2 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.columns { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) { .columns { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 20px; min-width: 0; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* File slots */
+.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 460px) { .slots { grid-template-columns: 1fr; } }
+.slot {
+  position: relative;
+  border: 1.5px dashed var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.slot:hover, .slot.dragging { border-color: var(--accent); }
+.slot:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.slot.loaded { border-style: solid; }
+.slot input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.slot-label { display: flex; align-items: center; gap: 8px; font: 600 0.95rem/1.3 var(--font-display); letter-spacing: 0.02em; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.swatch.ref { background: var(--ref); }
+.swatch.placed { background: var(--placed); }
+.slot-name { font: 500 0.88rem/1.4 var(--font-data); overflow-wrap: anywhere; }
+.slot-meta { font-size: 0.8rem; color: var(--muted); }
+.slot-error { font-size: 0.8rem; color: var(--axis-x); }
+
+.note {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+}
+.note strong { color: var(--ink); font-weight: 600; }
+
+/* Reference point */
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+legend { padding: 0; margin-bottom: 8px; }
+.options { display: flex; flex-wrap: wrap; gap: 6px; }
+.options label {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px;
+  font-size: 0.85rem; cursor: pointer;
+}
+.options label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+.options input { accent-color: var(--accent); margin: 0; }
+.xyz { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.xyz label { display: grid; gap: 2px; font-size: 0.75rem; color: var(--muted); }
+.xyz input {
+  font: 0.9rem var(--font-data); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; width: 100%;
+}
+.xyz input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Report */
+.report-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.report-hint { font-size: 0.85rem; color: var(--muted); display: none; }
+.report.empty .report-hint { display: block; }
+.readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 460px) { .readouts { grid-template-columns: 1fr; } }
+.readout { display: grid; gap: 6px; min-width: 0; }
+.readout h3 { font: 600 0.95rem/1.2 var(--font-display); margin: 0; letter-spacing: 0.02em; }
+.readout h3 span { color: var(--muted); font-weight: 500; }
+.readout dl { margin: 0; display: grid; grid-template-columns: auto 1fr; border-top: 1px solid var(--line); }
+.readout dt, .readout dd { margin: 0; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.readout dt { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); }
+.readout dd {
+  text-align: right;
+  font: 500 1.35rem/1.2 var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+.readout dt.total, .readout dd.total { border-bottom: 0; }
+.readout dd.total { font-size: 1.05rem; color: var(--muted); }
+.axis-tag {
+  display: inline-grid; place-items: center; width: 22px; height: 18px; border-radius: 3px;
+  font: 600 0.72rem/1 var(--font-data); color: var(--surface);
+}
+.axis-tag.x { background: var(--axis-x); }
+.axis-tag.y { background: var(--axis-y); }
+.axis-tag.z { background: var(--axis-z); }
+.report.empty dd { color: var(--line); }
+
+.fit { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.85rem; margin: 0; }
+.fit dt { color: var(--muted); }
+.fit dd { margin: 0; font-family: var(--font-data); font-size: 0.82rem; overflow-wrap: anywhere; min-width: 0; }
+
+.warnings { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.warnings:empty { display: none; }
+.warnings li {
+  background: var(--warn-bg); color: var(--warn-ink);
+  border-radius: 4px; padding: 8px 12px; font-size: 0.85rem;
+}
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+button {
+  font: 500 0.85rem/1 var(--font-body);
+  color: var(--accent); background: transparent;
+  border: 1px solid var(--accent); border-radius: 4px;
+  padding: 8px 14px; cursor: pointer;
+}
+button:hover { background: var(--bg); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.4; cursor: default; }
+.copy-status { font-size: 0.8rem; color: var(--muted); }
+#copy-fallback { width: 100%; min-height: 70px; font: 0.75rem var(--font-data); background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+
+details { font-size: 0.85rem; }
+details > summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+details[open] > summary { margin-bottom: 10px; }
+details p { margin: 0 0 8px; color: var(--muted); max-width: 70ch; }
+details p strong { color: var(--ink); font-weight: 600; }
+pre {
+  margin: 0; padding: 10px 12px; background: var(--bg); border-radius: 4px;
+  font: 0.78rem/1.5 var(--font-data); overflow-x: auto;
+}
+
+/* Viewer */
+.viewer-panel { position: sticky; top: calc(16px + env(safe-area-inset-top, 0px)); }
+@media (max-width: 880px) { .viewer-panel { position: static; } }
+.viewer {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 4 / 3.4;
+  border-radius: 4px;
+  background: radial-gradient(circle at 50% 40%, var(--surface), var(--bg));
+  overflow: hidden;
+  touch-action: none;
+}
+.viewer canvas { display: block; width: 100%; height: 100%; }
+.viewer-offline {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  padding: 24px; color: var(--muted); font-size: 0.9rem;
+}
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 0.82rem; }
+.legend label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.legend input { accent-color: var(--accent); margin: 0; }
+.fit-swatch { width: 12px; height: 0; border-top: 1.5px solid var(--ink); }
+.legend .hint { color: var(--muted); margin-left: auto; }
+.status { font-size: 0.85rem; color: var(--accent); margin: 0; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Bracket Deviation</h1>
+    <p>Compare a planned bracket with where it was actually placed. Load the same bracket twice: the reference position and the placed position.</p>
+  </header>
+
+  <div class="columns">
+    <div class="stack">
+      <section class="panel" aria-labelledby="files-title">
+        <h2 id="files-title">Brackets</h2>
+        <div class="slots">
+          <label class="slot" id="reference-zone">
+            <input type="file" id="reference-file" accept=".stl,model/stl,application/sla">
+            <span class="slot-label"><span class="swatch ref"></span>Reference (planned)</span>
+            <span class="slot-name" id="reference-name">No file loaded</span>
+            <span class="slot-meta" id="reference-meta">Drop an STL here or choose a file</span>
+            <span class="slot-error" id="reference-error" hidden></span>
+          </label>
+          <label class="slot" id="placed-zone">
+            <input type="file" id="placed-file" accept=".stl,model/stl,application/sla">
+            <span class="slot-label"><span class="swatch placed"></span>Placed</span>
+            <span class="slot-name" id="placed-name">No file loaded</span>
+            <span class="slot-meta" id="placed-meta">Drop an STL here or choose a file</span>
+            <span class="slot-error" id="placed-error" hidden></span>
+          </label>
+        </div>
+        <p class="note" id="example-note"><strong>Example loaded.</strong> These are generated brackets with a known deviation of +0.21, −0.34, +0.12 mm and +3.0°, −1.5°, +4.5°. Load your own STL files to replace them.</p>
+
+        <fieldset>
+          <legend><h2>Measure linear deviation at</h2></legend>
+          <div class="options">
+            <label><input type="radio" name="point" value="centroid" data-label="Bracket centroid" checked> Bracket centroid</label>
+            <label><input type="radio" name="point" value="bbox" data-label="Bounding-box center"> Bounding-box center</label>
+            <label><input type="radio" name="point" value="custom" data-label="Custom point"> Custom point</label>
+          </div>
+          <div class="xyz" id="custom-point" hidden>
+            <label for="point-x">X (mm)<input id="point-x" type="number" step="0.001" inputmode="decimal"></label>
+            <label for="point-y">Y (mm)<input id="point-y" type="number" step="0.001" inputmode="decimal"></label>
+            <label for="point-z">Z (mm)<input id="point-z" type="number" step="0.001" inputmode="decimal"></label>
+          </div>
+          <p class="note">The rotation is the same wherever you measure. The linear deviation depends on the point; a point on the slot or the bracket center is typical. Coordinates are those of the reference bracket.</p>
+        </fieldset>
+      </section>
+
+      <section class="panel report" id="report" aria-labelledby="report-title">
+        <div class="report-head">
+          <h2 id="report-title">Deviation · placed relative to reference</h2>
+          <span class="report-hint" id="report-hint"></span>
+        </div>
+        <p class="status" id="status" hidden></p>
+
+        <div class="readouts">
+          <div class="readout">
+            <h3>Linear <span>mm</span></h3>
+            <dl>
+              <dt><span class="axis-tag x">X</span>ΔX</dt><dd id="dx">—</dd>
+              <dt><span class="axis-tag y">Y</span>ΔY</dt><dd id="dy">—</dd>
+              <dt><span class="axis-tag z">Z</span>ΔZ</dt><dd id="dz">—</dd>
+              <dt class="total">3D distance</dt><dd class="total" id="d3">—</dd>
+            </dl>
+          </div>
+          <div class="readout">
+            <h3>Angular <span>degrees</span></h3>
+            <dl>
+              <dt><span class="axis-tag x">X</span>about X</dt><dd id="rx">—</dd>
+              <dt><span class="axis-tag y">Y</span>about Y</dt><dd id="ry">—</dd>
+              <dt><span class="axis-tag z">Z</span>about Z</dt><dd id="rz">—</dd>
+              <dt class="total">Total rotation</dt><dd class="total" id="ra">—</dd>
+            </dl>
+          </div>
+        </div>
+
+        <ul class="warnings" id="warnings"></ul>
+
+        <dl class="fit">
+          <dt>Matching</dt><dd id="fit-method">—</dd>
+          <dt>Fit error</dt><dd id="fit-rms">—</dd>
+          <dt>Point, reference</dt><dd id="point-from">—</dd>
+          <dt>Point, placed</dt><dd id="point-to">—</dd>
+        </dl>
+
+        <div class="actions">
+          <button type="button" id="copy">Copy results for spreadsheet</button>
+          <span class="copy-status" id="copy-status" aria-live="polite"></span>
+        </div>
+        <textarea id="copy-fallback" hidden readonly aria-label="Results as tab-separated text"></textarea>
+
+        <details>
+          <summary>How the numbers are defined</summary>
+          <p><strong>Linear.</strong> ΔX, ΔY, ΔZ are the placed position minus the reference position of the chosen point, in the coordinate system of your planning software (assumed to be millimetres).</p>
+          <p><strong>Angular.</strong> The rotation from the reference to the placed bracket is split into rotations about the fixed X axis, then Y, then Z (R = Rz·Ry·Rx). Positive angles follow the right-hand rule: counter-clockwise when looking from the positive end of the axis toward the origin. Total rotation is the single angle about the axis below.</p>
+          <p><strong>Clinical reading.</strong> If your software's axes line up with the tooth (X mesiodistal, Y occlusogingival, Z buccolingual), rotation about X is torque, about Y is in/out rotation, and about Z is tip. With arch-wide axes this holds only roughly, and less so on teeth far from the midline.</p>
+          <p><strong>Matching.</strong> If both STLs list the same triangles in the same order, the transform is solved directly and is exact. Otherwise the surfaces are matched with ICP (iterative closest point), which stays reliable as long as both files are the same bracket model.</p>
+          <dl class="fit">
+            <dt>Rotation axis</dt><dd id="axis">—</dd>
+          </dl>
+          <p>Transform (placed = R · reference + t):</p>
+          <pre id="matrix"></pre>
+        </details>
+      </section>
+    </div>
+
+    <section class="panel viewer-panel" aria-labelledby="viewer-title">
+      <div class="report-head">
+        <h2 id="viewer-title">Overlay</h2>
+        <button type="button" id="reframe">Fit to view</button>
+      </div>
+      <div class="viewer" id="viewer">
+        <div class="viewer-offline" id="viewer-offline" hidden>The 3D view needs an internet connection to load. The deviation numbers work offline.</div>
+      </div>
+      <div class="legend">
+        <label><input type="checkbox" id="show-reference" checked><span class="swatch ref"></span>Reference</label>
+        <label><input type="checkbox" id="show-placed" checked><span class="swatch placed"></span>Placed</label>
+        <label><input type="checkbox" id="show-fit"><span class="fit-swatch"></span>Reference moved by the fit</label>
+        <span class="hint">Drag to orbit · scroll to zoom · right-drag to pan</span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="src/registration.js"></script>
+<script src="src/stl.js"></script>
+<script src="src/sample.js"></script>
+<script src="src/viewer.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
