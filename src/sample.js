@@ -62,7 +62,7 @@
     const Rc = M.matVec(R, c);
     const t = [0, 1, 2].map((k) => c[k] + expected.delta[k] - Rc[k]);
     const placed = M.applyTransform(R, t, reference);
-    return { reference, placed, expected };
+    return { local, reference, placed, expected };
   }
 
   return { makeSampleBracket, makeSampleCase };

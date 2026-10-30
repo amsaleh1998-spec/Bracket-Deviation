@@ -81,25 +81,27 @@
 
     let framed = false;
 
-    // colors: { reference, placed, fit, x, y, z, ink } as CSS color strings
+    // guide: { from, to, axes } in software coordinates; axes columns are the
+    // directions drawn as X, Y, Z. colors: CSS color strings.
     function show(data) {
       Object.values(groups).forEach(clear);
-      const { reference, placed, moved, deviation, colors, bbox } = data;
+      const { reference, placed, moved, guide, colors, bbox } = data;
       if (reference) groups.reference.add(mesh(reference, colors.reference, 0.55));
       if (placed) groups.placed.add(mesh(placed, colors.placed, 0.55));
       if (moved) {
         const edges = new THREE.EdgesGeometry(geometry(moved), 20);
         groups.fit.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: colors.fit })));
       }
-      if (deviation && bbox) {
+      if (guide && bbox) {
         const size = bbox.diagonal;
-        const origin = new THREE.Vector3(...deviation.from);
-        [[1, 0, 0, colors.x], [0, 1, 0, colors.y], [0, 0, 1, colors.z]].forEach(([x, y, z, c]) => {
-          groups.guides.add(new THREE.ArrowHelper(new THREE.Vector3(x, y, z), origin, size * 0.45, new THREE.Color(c).getHex(), size * 0.06, size * 0.03));
+        const origin = new THREE.Vector3(...guide.from);
+        [colors.x, colors.y, colors.z].forEach((c, k) => {
+          const dir = new THREE.Vector3(guide.axes[0][k], guide.axes[1][k], guide.axes[2][k]);
+          groups.guides.add(new THREE.ArrowHelper(dir, origin, size * 0.45, new THREE.Color(c).getHex(), size * 0.06, size * 0.03));
         });
-        groups.guides.add(marker(deviation.from, colors.reference, size * 0.015));
-        groups.guides.add(marker(deviation.to, colors.placed, size * 0.015));
-        const line = new THREE.BufferGeometry().setFromPoints([origin, new THREE.Vector3(...deviation.to)]);
+        groups.guides.add(marker(guide.from, colors.reference, size * 0.015));
+        groups.guides.add(marker(guide.to, colors.placed, size * 0.015));
+        const line = new THREE.BufferGeometry().setFromPoints([origin, new THREE.Vector3(...guide.to)]);
         groups.guides.add(new THREE.Line(line, new THREE.LineBasicMaterial({ color: colors.ink })));
       }
       if (bbox && !framed) frame(bbox);

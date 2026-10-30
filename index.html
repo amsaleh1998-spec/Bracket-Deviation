@@ -113,6 +113,13 @@ h2 {
 .slot-name { font: 500 0.88rem/1.4 var(--font-data); overflow-wrap: anywhere; }
 .slot-meta { font-size: 0.8rem; color: var(--muted); }
 .slot-error { font-size: 0.8rem; color: var(--axis-x); }
+.slot.wide { grid-column: 1 / -1; }
+.slot-label .optional { font: 400 0.8rem var(--font-body); color: var(--muted); letter-spacing: 0; }
+.slot-clear {
+  position: relative; z-index: 1; justify-self: start; margin-top: 6px;
+  padding: 4px 10px; font-size: 0.78rem;
+}
+.swatch.model { background: transparent; border: 1.5px solid var(--muted); }
 
 .note {
   font-size: 0.85rem;
@@ -131,7 +138,9 @@ legend { padding: 0; margin-bottom: 8px; }
   font-size: 0.85rem; cursor: pointer;
 }
 .options label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+.options label:has(input:disabled) { opacity: 0.45; cursor: default; }
 .options input { accent-color: var(--accent); margin: 0; }
+.xyz-head { font-size: 0.75rem; color: var(--muted); grid-column: 1 / -1; }
 .xyz { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .xyz label { display: grid; gap: 2px; font-size: 0.75rem; color: var(--muted); }
 .xyz input {
@@ -170,6 +179,7 @@ legend { padding: 0; margin-bottom: 8px; }
 
 .fit { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.85rem; margin: 0; }
 .fit dt { color: var(--muted); }
+.fit-row { display: contents; }
 .fit dd { margin: 0; font-family: var(--font-data); font-size: 0.82rem; overflow-wrap: anywhere; min-width: 0; }
 
 .warnings { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
@@ -246,38 +256,57 @@ pre {
             <input type="file" id="reference-file" accept=".stl,model/stl,application/sla">
             <span class="slot-label"><span class="swatch ref"></span>Reference (planned)</span>
             <span class="slot-name" id="reference-name">No file loaded</span>
-            <span class="slot-meta" id="reference-meta">Drop an STL here or choose a file</span>
+            <span class="slot-meta" id="reference-meta" data-empty="Drop an STL here or choose a file">Drop an STL here or choose a file</span>
             <span class="slot-error" id="reference-error" hidden></span>
           </label>
           <label class="slot" id="placed-zone">
             <input type="file" id="placed-file" accept=".stl,model/stl,application/sla">
             <span class="slot-label"><span class="swatch placed"></span>Placed</span>
             <span class="slot-name" id="placed-name">No file loaded</span>
-            <span class="slot-meta" id="placed-meta">Drop an STL here or choose a file</span>
+            <span class="slot-meta" id="placed-meta" data-empty="Drop an STL here or choose a file">Drop an STL here or choose a file</span>
             <span class="slot-error" id="placed-error" hidden></span>
           </label>
+          <label class="slot wide" id="model-zone">
+            <input type="file" id="model-file" accept=".stl,model/stl,application/sla">
+            <span class="slot-label"><span class="swatch model"></span>Bracket model <span class="optional">optional · in its own coordinates</span></span>
+            <span class="slot-name" id="model-name">No file loaded</span>
+            <span class="slot-meta" id="model-meta" data-empty="The library STL of this bracket, centred on its own origin. Lets you report the deviation along the bracket's axes (torque, rotation, tip).">The library STL of this bracket, centred on its own origin. Lets you report the deviation along the bracket's axes (torque, rotation, tip).</span>
+            <span class="slot-error" id="model-error" hidden></span>
+            <button type="button" class="slot-clear" id="model-clear" hidden>Remove</button>
+          </label>
         </div>
-        <p class="note" id="example-note"><strong>Example loaded.</strong> These are generated brackets with a known deviation of +0.21, −0.34, +0.12 mm and +3.0°, −1.5°, +4.5°. Load your own STL files to replace them.</p>
+        <p class="note" id="example-note"><strong>Example loaded.</strong> These are generated brackets with a known deviation of +0.21, −0.34, +0.12 mm and +3.0°, −1.5°, +4.5° (software axes, at the centroid). Switch to the bracket's axes to see the same deviation as torque, rotation and tip. Load your own STL files to replace the example.</p>
+
+        <fieldset>
+          <legend><h2>Report along</h2></legend>
+          <div class="options">
+            <label><input type="radio" name="axes" id="axes-software" value="software" checked> Planning software axes</label>
+            <label><input type="radio" name="axes" id="axes-bracket" value="bracket" disabled> Bracket axes</label>
+          </div>
+          <p class="note">Bracket axes need the bracket model: X mesiodistal (along the slot), Y occlusogingival, Z buccolingual, taken from the planned bracket. Rotation about them reads as torque, rotation and tip.</p>
+        </fieldset>
 
         <fieldset>
           <legend><h2>Measure linear deviation at</h2></legend>
           <div class="options">
-            <label><input type="radio" name="point" value="centroid" data-label="Bracket centroid" checked> Bracket centroid</label>
+            <label><input type="radio" name="point" id="point-origin" value="origin" data-label="Bracket model origin" disabled> Bracket origin</label>
+            <label><input type="radio" name="point" id="point-centroid" value="centroid" data-label="Bracket centroid" checked> Bracket centroid</label>
             <label><input type="radio" name="point" value="bbox" data-label="Bounding-box center"> Bounding-box center</label>
             <label><input type="radio" name="point" value="custom" data-label="Custom point"> Custom point</label>
           </div>
           <div class="xyz" id="custom-point" hidden>
-            <label for="point-x">X (mm)<input id="point-x" type="number" step="0.001" inputmode="decimal"></label>
-            <label for="point-y">Y (mm)<input id="point-y" type="number" step="0.001" inputmode="decimal"></label>
-            <label for="point-z">Z (mm)<input id="point-z" type="number" step="0.001" inputmode="decimal"></label>
+            <span class="xyz-head" id="custom-axes">in software coordinates</span>
+            <label for="point-x">X (mm)<input id="point-x" type="number" step="0.0001" inputmode="decimal"></label>
+            <label for="point-y">Y (mm)<input id="point-y" type="number" step="0.0001" inputmode="decimal"></label>
+            <label for="point-z">Z (mm)<input id="point-z" type="number" step="0.0001" inputmode="decimal"></label>
           </div>
-          <p class="note">The rotation is the same wherever you measure. The linear deviation depends on the point; a point on the slot or the bracket center is typical. Coordinates are those of the reference bracket.</p>
+          <p class="note">The rotation is the same wherever you measure. The linear deviation depends on the point. Bracket origin is the (0, 0, 0) of the bracket model file, usually the slot or bracket center in library files.</p>
         </fieldset>
       </section>
 
       <section class="panel report" id="report" aria-labelledby="report-title">
         <div class="report-head">
-          <h2 id="report-title">Deviation · placed relative to reference</h2>
+          <h2 id="report-title">Deviation · placed relative to reference <span id="report-axes"></span></h2>
           <span class="report-hint" id="report-hint"></span>
         </div>
         <p class="status" id="status" hidden></p>
@@ -286,18 +315,18 @@ pre {
           <div class="readout">
             <h3>Linear <span>mm</span></h3>
             <dl>
-              <dt><span class="axis-tag x">X</span>ΔX</dt><dd id="dx">—</dd>
-              <dt><span class="axis-tag y">Y</span>ΔY</dt><dd id="dy">—</dd>
-              <dt><span class="axis-tag z">Z</span>ΔZ</dt><dd id="dz">—</dd>
+              <dt><span class="axis-tag x">X</span><span id="lab-dx">ΔX</span></dt><dd id="dx">—</dd>
+              <dt><span class="axis-tag y">Y</span><span id="lab-dy">ΔY</span></dt><dd id="dy">—</dd>
+              <dt><span class="axis-tag z">Z</span><span id="lab-dz">ΔZ</span></dt><dd id="dz">—</dd>
               <dt class="total">3D distance</dt><dd class="total" id="d3">—</dd>
             </dl>
           </div>
           <div class="readout">
             <h3>Angular <span>degrees</span></h3>
             <dl>
-              <dt><span class="axis-tag x">X</span>about X</dt><dd id="rx">—</dd>
-              <dt><span class="axis-tag y">Y</span>about Y</dt><dd id="ry">—</dd>
-              <dt><span class="axis-tag z">Z</span>about Z</dt><dd id="rz">—</dd>
+              <dt><span class="axis-tag x">X</span><span id="lab-rx">about X</span></dt><dd id="rx">—</dd>
+              <dt><span class="axis-tag y">Y</span><span id="lab-ry">about Y</span></dt><dd id="ry">—</dd>
+              <dt><span class="axis-tag z">Z</span><span id="lab-rz">about Z</span></dt><dd id="rz">—</dd>
               <dt class="total">Total rotation</dt><dd class="total" id="ra">—</dd>
             </dl>
           </div>
@@ -306,10 +335,10 @@ pre {
         <ul class="warnings" id="warnings"></ul>
 
         <dl class="fit">
-          <dt>Matching</dt><dd id="fit-method">—</dd>
-          <dt>Fit error</dt><dd id="fit-rms">—</dd>
-          <dt>Point, reference</dt><dd id="point-from">—</dd>
-          <dt>Point, placed</dt><dd id="point-to">—</dd>
+          <dt>Placed vs reference fit</dt><dd id="fit-rms">—</dd>
+          <div class="fit-row" id="model-fit-row" hidden><dt>Model vs reference fit</dt><dd id="model-fit"></dd></div>
+          <dt id="point-from-label">Point, reference</dt><dd id="point-from">—</dd>
+          <dt id="point-to-label">Point, placed</dt><dd id="point-to">—</dd>
         </dl>
 
         <div class="actions">
@@ -322,7 +351,8 @@ pre {
           <summary>How the numbers are defined</summary>
           <p><strong>Linear.</strong> ΔX, ΔY, ΔZ are the placed position minus the reference position of the chosen point, in the coordinate system of your planning software (assumed to be millimetres).</p>
           <p><strong>Angular.</strong> The rotation from the reference to the placed bracket is split into rotations about the fixed X axis, then Y, then Z (R = Rz·Ry·Rx). Positive angles follow the right-hand rule: counter-clockwise when looking from the positive end of the axis toward the origin. Total rotation is the single angle about the axis below.</p>
-          <p><strong>Clinical reading.</strong> If your software's axes line up with the tooth (X mesiodistal, Y occlusogingival, Z buccolingual), rotation about X is torque, about Y is in/out rotation, and about Z is tip. With arch-wide axes this holds only roughly, and less so on teeth far from the midline.</p>
+          <p><strong>Bracket axes.</strong> The bracket model is fitted onto the planned bracket, which gives the planned bracket's own X (mesiodistal, along the slot), Y (occlusogingival) and Z (buccolingual) axes. The deviation is then expressed along those axes, so rotation about X is torque, about Y is rotation, and about Z is tip, on every tooth. Which direction counts as positive (mesial or distal, crown labial or lingual) depends on the bracket file's axis directions and on the side of the arch.</p>
+          <p><strong>Software axes.</strong> Without the bracket model the deviation is given along the planning software's X, Y, Z. These follow the arch, not the tooth.</p>
           <p><strong>Matching.</strong> If both STLs list the same triangles in the same order, the transform is solved directly from matching vertices (exact when the export is exact). Otherwise the surfaces are matched with ICP (iterative closest point), which stays reliable as long as both files are the same bracket model.</p>
           <dl class="fit">
             <dt>Rotation axis</dt><dd id="axis">—</dd>

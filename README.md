@@ -2,11 +2,16 @@
 
 Measures how far a placed orthodontic bracket deviates from its planned
 (reference) position. Load two STL files of the same bracket: the reference
-position from the planning software and the placed position. The app reports:
+position from the planning software and the placed position. Optionally load
+a third: the bracket model in its own coordinates (the library STL). The app
+reports:
 
 - **Linear deviation** ΔX, ΔY, ΔZ (mm) and the 3D distance, measured at the
-  bracket centroid, its bounding-box center or a point you enter
+  bracket origin, centroid, bounding-box center or a point you enter
 - **Angular deviation** about X, Y and Z (degrees) and the total rotation angle
+- Either along the **planning software's axes**, or, with the bracket model,
+  along the **bracket's own axes**: mesiodistal, occlusogingival and
+  buccolingual, so the rotations read as torque, rotation and tip
 - The fit error, so you can see how well the two meshes matched
 - A 3D overlay of both brackets
 
@@ -19,7 +24,8 @@ The 3D view loads three.js from a CDN, so it needs an internet connection; the
 numbers work offline.
 
 `samples/` has a reference and a placed bracket with a known deviation
-(+0.21, −0.34, +0.12 mm; +3.0°, −1.5°, +4.5° at the centroid) to try it with.
+(+0.21, −0.34, +0.12 mm; +3.0°, −1.5°, +4.5° at the centroid, in software
+axes) and the bracket model in its own coordinates, to try it with.
 
 ## How the deviation is computed
 
@@ -41,15 +47,26 @@ numbers work offline.
      axes (`R = Rz · Ry · Rx`), right-hand rule. The total rotation is the
      single equivalent angle about one axis.
 
-All values are placed minus reference, in the coordinate system of the
-planning software (assumed millimetres).
+All values are placed minus reference (assumed millimetres).
 
-### Reading the angles clinically
+### Bracket axes
 
-If the software's axes line up with the tooth (X mesiodistal, Y
-occlusogingival, Z buccolingual), rotation about X is torque, about Y is
-in/out rotation, and about Z is tip. With arch-wide axes this holds only
-roughly, and less so for teeth far from the midline.
+Planning software axes follow the arch, not the tooth. To report along the
+bracket's own axes, load the bracket model: the same bracket in its own
+coordinates, as in the manufacturer's library file (X along the slot, Y
+occlusogingival, Z buccolingual, origin usually at the slot or bracket
+center). The model is fitted onto the planned bracket the same way as above,
+giving the frame `reference = F · model + o`. The deviation is then expressed
+in that frame:
+
+- linear: `Fᵀ · (R · p + t − p)`
+- angular: `Fᵀ · R · F`, split into X, Y, Z as above
+
+So rotation about X is torque, about Y is rotation, and about Z is tip, on
+every tooth. Which direction counts as positive (mesial or distal, crown
+labial or lingual) depends on the axis directions in the bracket file and on
+the side of the arch. The 3D distance and total rotation are the same in
+either set of axes.
 
 ## Development
 
@@ -60,7 +77,7 @@ npm run samples   # regenerate samples/*.stl
 
 | File | Purpose |
 | --- | --- |
-| `src/registration.js` | Rigid fit, ICP, k-d tree, Euler angles, deviation |
+| `src/registration.js` | Rigid fit, ICP, k-d tree, Euler angles, deviation (software or bracket axes) |
 | `src/stl.js` | STL reader and writer |
 | `src/sample.js` | Generated example bracket |
 | `src/viewer.js` | three.js overlay |

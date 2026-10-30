@@ -4,13 +4,25 @@
 
   const M = window.BracketMath;
   const $ = (id) => document.getElementById(id);
+  const SLOTS = ['reference', 'placed', 'model'];
 
   const state = {
     reference: null, // { name, positions, triangleCount, format }
     placed: null,
+    model: null, // the bracket in its own coordinates (optional)
     example: false,
-    registration: null,
-    deviation: null,
+    registration: null, // reference -> placed
+    frame: null, // model -> reference: the reference bracket's own axes
+    deviation: null, // as displayed (software or bracket axes)
+    useBracketAxesNext: false,
+  };
+
+  const AXIS_LABELS = {
+    software: { lin: ['ΔX', 'ΔY', 'ΔZ'], ang: ['about X', 'about Y', 'about Z'] },
+    bracket: {
+      lin: ['ΔX mesiodistal', 'ΔY occlusogingival', 'ΔZ buccolingual'],
+      ang: ['about X · torque', 'about Y · rotation', 'about Z · tip'],
+    },
   };
 
   const viewer = window.BracketViewer.createViewer($('viewer'));
@@ -51,14 +63,14 @@
         return;
       }
       if (state.example) {
-        // The first real file replaces the example in both slots.
+        // The first real file replaces the example in every slot.
         state.example = false;
-        state.reference = null;
-        state.placed = null;
+        SLOTS.forEach((s) => (state[s] = null));
         $('example-note').hidden = true;
         if (viewer) viewer.resetFraming();
       }
       state[slot] = Object.assign({ name: file.name }, parsed);
+      if (slot === 'model') state.useBracketAxesNext = true;
       update();
     };
     reader.onerror = () => showSlotError(slot, `${file.name} could not be read.`);
@@ -77,7 +89,7 @@
     $(`${slot}-name`).textContent = data ? data.name : 'No file loaded';
     $(`${slot}-meta`).textContent = data
       ? `${data.triangleCount.toLocaleString()} triangles · ${data.format === 'ascii' ? 'ASCII' : 'binary'} STL`
-      : 'Drop an STL here or choose a file';
+      : $(`${slot}-meta`).dataset.empty;
     $(`${slot}-zone`).classList.toggle('loaded', !!data);
   }
 
@@ -86,44 +98,89 @@
   // ---------------------------------------------------------------------------
 
   function update() {
-    renderSlot('reference');
-    renderSlot('placed');
+    SLOTS.forEach(renderSlot);
+    $('model-clear').hidden = !state.model;
     state.registration = null;
-    if (!state.reference || !state.placed) {
-      showReport();
-      return;
-    }
-    $('status').textContent = 'Matching the brackets…';
+    state.frame = null;
     $('status').hidden = false;
+    $('status').textContent = 'Matching the brackets…';
     // let the status paint before the (blocking) computation
     setTimeout(() => {
       try {
-        state.registration = M.register(state.reference.positions, state.placed.positions);
+        if (state.reference && state.placed) {
+          state.registration = M.register(state.reference.positions, state.placed.positions);
+        }
+        if (state.model && state.reference) {
+          state.frame = M.register(state.model.positions, state.reference.positions);
+        }
       } catch (err) {
         $('status').textContent = `The brackets could not be matched: ${err.message}`;
         return;
       }
       $('status').hidden = true;
-      onPointModeChange();
+      if (state.frame && state.useBracketAxesNext) {
+        state.useBracketAxesNext = false;
+        $('axes-bracket').checked = true;
+        $('point-origin').checked = true;
+        $('point-x').value = '';
+      }
+      onOptionsChange();
     }, 30);
   }
 
+  const axesMode = () => (state.frame && $('axes-bracket').checked ? 'bracket' : 'software');
+  const pointMode = () => document.querySelector('input[name="point"]:checked').value;
+
+  // Bracket coordinates -> software coordinates and back.
+  const toSoftware = (p) => M.matVec(state.frame.R, p).map((v, k) => v + state.frame.t[k]);
+  const toBracket = (p) => M.matVec(M.transpose(state.frame.R), p.map((v, k) => v - state.frame.t[k]));
+
+  // The chosen point on the reference bracket, in software coordinates.
   function referencePoint() {
-    const mode = document.querySelector('input[name="point"]:checked').value;
+    const mode = pointMode();
     const ref = state.reference.positions;
     if (mode === 'centroid') return M.surfaceCentroid(ref);
     if (mode === 'bbox') return M.boundingBox(ref).center;
-    return ['x', 'y', 'z'].map((a) => parseFloat($(`point-${a}`).value) || 0);
+    if (mode === 'origin') return state.frame.t.slice();
+    const p = ['x', 'y', 'z'].map((a) => parseFloat($(`point-${a}`).value) || 0);
+    return axesMode() === 'bracket' ? toSoftware(p) : p;
   }
 
-  function onPointModeChange() {
-    const custom = document.querySelector('input[name="point"]:checked').value === 'custom';
-    $('custom-point').hidden = !custom;
-    if (custom && state.reference && $('point-x').value === '') {
-      const c = M.surfaceCentroid(state.reference.positions);
-      ['x', 'y', 'z'].forEach((a, k) => ($(`point-${a}`).value = c[k].toFixed(3)));
+  let customAxes = 'software'; // the axes the custom point's numbers are in
+
+  function onOptionsChange() {
+    // Bracket-axes options need the bracket model.
+    $('axes-bracket').disabled = !state.frame;
+    $('point-origin').disabled = !state.frame;
+    if (!state.frame) {
+      $('axes-software').checked = true;
+      if ($('point-origin').checked) $('point-centroid').checked = true;
     }
+    const axes = axesMode();
+    const custom = pointMode() === 'custom';
+    $('custom-point').hidden = !custom;
+    if (custom && state.reference) {
+      if (customAxes !== axes && $('point-x').value !== '') {
+        if (state.frame) {
+          // keep the same physical point when switching axes
+          const p = ['x', 'y', 'z'].map((a) => parseFloat($(`point-${a}`).value) || 0);
+          writeCustom(axes === 'bracket' ? toBracket(p) : toSoftware(p));
+        } else {
+          $('point-x').value = ''; // bracket coordinates mean nothing without the model
+        }
+      }
+      if ($('point-x').value === '') {
+        const c = M.surfaceCentroid(state.reference.positions);
+        writeCustom(axes === 'bracket' ? toBracket(c) : c);
+      }
+    }
+    customAxes = axes;
+    $('custom-axes').textContent = axes === 'bracket' ? 'in bracket coordinates' : 'in software coordinates';
     showReport();
+  }
+
+  function writeCustom(p) {
+    ['x', 'y', 'z'].forEach((a, k) => ($(`point-${a}`).value = p[k].toFixed(4)));
   }
 
   // ---------------------------------------------------------------------------
@@ -133,13 +190,31 @@
   const fmt = (v, digits) => {
     const s = (Math.abs(v) < 0.5 * Math.pow(10, -digits) ? 0 : v).toFixed(digits);
     if (s === (0).toFixed(digits)) return s;
-    return v > 0 ? '+' + s : '\u2212' + s.slice(1);
+    return v > 0 ? '+' + s : '−' + s.slice(1);
   };
   const coords = (p) => p.map((v) => v.toFixed(3)).join(', ');
+  const fitText = (r) =>
+    `${r.rms.toFixed(4)} mm RMS, ${r.maxError.toFixed(4)} max (${r.method === 'vertex' ? 'by vertices' : 'by surface'})`;
+
+  function listItem(text) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    return li;
+  }
 
   function showReport() {
     const reg = state.registration;
+    const axes = axesMode();
+    const labels = AXIS_LABELS[axes];
+    ['dx', 'dy', 'dz'].forEach((id, k) => ($(`lab-${id}`).textContent = labels.lin[k]));
+    ['rx', 'ry', 'rz'].forEach((id, k) => ($(`lab-${id}`).textContent = labels.ang[k]));
+    $('report-axes').textContent = axes === 'bracket' ? "along the bracket's own axes" : "along the planning software's axes";
+    $('point-from-label').textContent = axes === 'bracket' ? 'Point, bracket coords' : 'Point, reference';
+    $('point-to-label').textContent = axes === 'bracket' ? 'Moved to, bracket coords' : 'Point, placed';
+    $('model-fit-row').hidden = !state.frame;
+    $('model-fit').textContent = state.frame ? fitText(state.frame) : '';
     $('report').classList.toggle('empty', !reg);
+
     if (!reg) {
       state.deviation = null;
       $('report-hint').textContent = !state.reference
@@ -148,17 +223,16 @@
         ? 'Load the placed bracket STL.'
         : 'Matching the brackets…';
       ['dx', 'dy', 'dz', 'd3', 'rx', 'ry', 'rz', 'ra'].forEach((id) => ($(id).textContent = '—'));
-      $('fit-method').textContent = '—';
-      $('fit-rms').textContent = '—';
-      $('point-from').textContent = '—';
-      $('point-to').textContent = '—';
-      $('axis').textContent = '—';
+      ['fit-rms', 'point-from', 'point-to', 'axis'].forEach((id) => ($(id).textContent = '—'));
       $('matrix').textContent = '';
       $('warnings').replaceChildren();
-      drawViewer();
+      drawViewer(null);
       return;
     }
-    const dev = M.computeDeviation(reg.R, reg.t, referencePoint());
+
+    const point = referencePoint();
+    const global = M.computeDeviation(reg.R, reg.t, point);
+    const dev = axes === 'bracket' ? M.computeDeviationInFrame(reg.R, reg.t, point, state.frame) : global;
     state.deviation = dev;
     $('dx').textContent = fmt(dev.delta[0], 3);
     $('dy').textContent = fmt(dev.delta[1], 3);
@@ -168,8 +242,7 @@
     $('ry').textContent = fmt(dev.rotation.y, 2);
     $('rz').textContent = fmt(dev.rotation.z, 2);
     $('ra').textContent = dev.angle.toFixed(2);
-    $('fit-method').textContent = reg.method === 'vertex' ? 'Vertex correspondence' : 'Surface matching (ICP)';
-    $('fit-rms').textContent = `${reg.rms.toFixed(4)} mm RMS · ${reg.maxError.toFixed(4)} mm max`;
+    $('fit-rms').textContent = fitText(reg);
     $('point-from').textContent = coords(dev.from);
     $('point-to').textContent = coords(dev.to);
     $('axis').textContent = dev.axis.map((v) => v.toFixed(3)).join(', ');
@@ -177,20 +250,17 @@
       .map((i) => reg.R[i].map((v) => v.toFixed(6).padStart(10)).join(' ') + '  │ ' + reg.t[i].toFixed(4).padStart(10))
       .join('\n');
     $('warnings').replaceChildren(
-      ...reg.warnings.map((w) => {
-        const li = document.createElement('li');
-        li.textContent = w;
-        return li;
-      })
+      ...reg.warnings.map(listItem),
+      ...(state.frame ? state.frame.warnings.map((w) => listItem('Bracket model: ' + w)) : [])
     );
-    drawViewer();
+    drawViewer(global);
   }
 
   function token(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
-  function drawViewer() {
+  function drawViewer(global) {
     if (!viewer) return;
     const reg = state.registration;
     const ref = state.reference && state.reference.positions;
@@ -200,7 +270,11 @@
       reference: ref,
       placed: plc,
       moved: reg && ref.length <= 3e6 ? M.applyTransform(reg.R, reg.t, ref) : null,
-      deviation: state.deviation,
+      guide: global && {
+        from: global.from,
+        to: global.to,
+        axes: axesMode() === 'bracket' ? state.frame.R : M.identity3(),
+      },
       bbox: all ? M.boundingBox(all) : null,
       colors: {
         reference: token('--ref'),
@@ -222,13 +296,16 @@
   function resultsTable() {
     const dev = state.deviation, reg = state.registration;
     const pointLabel = document.querySelector('input[name="point"]:checked').dataset.label;
+    const bracket = axesMode() === 'bracket';
     const header = [
-      'Reference file', 'Placed file', 'Reference point', 'Point X', 'Point Y', 'Point Z',
+      'Reference file', 'Placed file', 'Bracket model file', 'Axes', 'Reference point', 'Point X', 'Point Y', 'Point Z',
       'dX (mm)', 'dY (mm)', 'dZ (mm)', '3D (mm)', 'rX (deg)', 'rY (deg)', 'rZ (deg)', 'Total rotation (deg)',
       'Fit RMS (mm)', 'Method',
     ];
     const row = [
-      state.reference.name, state.placed.name, pointLabel, ...dev.from.map((v) => v.toFixed(4)),
+      state.reference.name, state.placed.name, state.model ? state.model.name : '',
+      bracket ? 'bracket (X mesiodistal, Y occlusogingival, Z buccolingual)' : 'planning software',
+      pointLabel, ...dev.from.map((v) => v.toFixed(4)),
       ...dev.delta.map((v) => v.toFixed(4)), dev.distance.toFixed(4),
       dev.rotation.x.toFixed(3), dev.rotation.y.toFixed(3), dev.rotation.z.toFixed(3), dev.angle.toFixed(3),
       reg.rms.toFixed(5), reg.method === 'vertex' ? 'vertex correspondence' : 'ICP',
@@ -259,9 +336,15 @@
   // Start
   // ---------------------------------------------------------------------------
 
-  setupSlot('reference');
-  setupSlot('placed');
-  document.querySelectorAll('input[name="point"]').forEach((r) => r.addEventListener('change', onPointModeChange));
+  SLOTS.forEach(setupSlot);
+  $('model-clear').addEventListener('click', (e) => {
+    e.preventDefault();
+    state.model = null;
+    update();
+  });
+  document
+    .querySelectorAll('input[name="point"], input[name="axes"]')
+    .forEach((r) => r.addEventListener('change', onOptionsChange));
   ['x', 'y', 'z'].forEach((a) => $(`point-${a}`).addEventListener('input', showReport));
   ['reference', 'placed', 'fit'].forEach((g) =>
     $(`show-${g}`).addEventListener('change', (e) => viewer && viewer.setVisible(g, e.target.checked))
@@ -271,13 +354,16 @@
     const pts = [state.reference, state.placed].filter(Boolean).map((s) => M.uniqueVertices(s.positions));
     viewer.reframe(M.boundingBox(Float64Array.from(pts.flatMap((p) => Array.from(p)))));
   });
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawViewer);
-  new MutationObserver(drawViewer).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  const redraw = () => showReport();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+  new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   // Open on an example so the report shows what it measures.
   const example = window.BracketSample.makeSampleCase();
+  const asFile = (name, positions) => ({ name, positions, triangleCount: positions.length / 9, format: 'binary' });
   state.example = true;
-  state.reference = { name: 'example_reference.stl', positions: example.reference, triangleCount: example.reference.length / 9, format: 'binary' };
-  state.placed = { name: 'example_placed.stl', positions: example.placed, triangleCount: example.placed.length / 9, format: 'binary' };
+  state.reference = asFile('example_reference.stl', example.reference);
+  state.placed = asFile('example_placed.stl', example.placed);
+  state.model = asFile('example_bracket_model.stl', example.local);
   update();
 })();

@@ -485,6 +485,27 @@
     };
   }
 
+  // The same deviation, expressed along a bracket's own axes. `frame` maps
+  // bracket coordinates to software coordinates (x_software = frame.R · x_bracket
+  // + frame.t), e.g. the registration of the bracket model onto the reference.
+  // Points are returned in the reference bracket's coordinates.
+  function computeDeviationInFrame(R, t, point, frame) {
+    const Ft = transpose(frame.R);
+    const g = computeDeviation(R, t, point);
+    const toLocal = (p) => matVec(Ft, [p[0] - frame.t[0], p[1] - frame.t[1], p[2] - frame.t[2]]);
+    const Rl = matMul(Ft, matMul(R, frame.R));
+    const aa = axisAngle(Rl);
+    return {
+      from: toLocal(g.from),
+      to: toLocal(g.to),
+      delta: matVec(Ft, g.delta),
+      distance: g.distance,
+      rotation: eulerXYZ(Rl),
+      angle: aa.angle,
+      axis: aa.axis,
+    };
+  }
+
   return {
     identity3,
     matMul,
@@ -506,5 +527,6 @@
     eulerXYZ,
     axisAngle,
     computeDeviation,
+    computeDeviationInFrame,
   };
 });

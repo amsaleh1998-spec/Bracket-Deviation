@@ -148,3 +148,27 @@ test('same vertex order with small vertex noise still uses vertex correspondence
   const dev = M.computeDeviation(reg.R, reg.t, M.surfaceCentroid(reference));
   checkDeviation(dev, expected, 0.005, 0.2);
 });
+
+test('deviation along the bracket axes, from a bracket model in its own coordinates', () => {
+  const model = makeSampleBracket();
+  // Deviation defined in bracket coordinates: about the bracket origin.
+  const Rd = M.rotationFromEuler(-4, 2.5, 7); // torque, rotation, tip
+  const td = [0.3, -0.15, 0.05];
+  const placedLocal = M.applyTransform(Rd, td, model);
+  // Both brackets placed on the arch with the same (unknown to the app) pose.
+  const A = { R: M.rotationFromEuler(15, -20, 110), t: [-18, 9, 3] };
+  const reference = M.applyTransform(A.R, A.t, model);
+  const placed = M.applyTransform(A.R, A.t, placedLocal);
+
+  const frame = M.register(model, reference);
+  const reg = M.register(reference, placed);
+  const dev = M.computeDeviationInFrame(reg.R, reg.t, frame.t, frame);
+  checkDeviation(dev, { delta: td, rotation: { x: -4, y: 2.5, z: 7 } }, 1e-9, 1e-7);
+  dev.from.forEach((v) => near(v, 0, 1e-9, 'origin in bracket coordinates'));
+
+  // In software axes the same deviation reads differently, same total size.
+  const global = M.computeDeviation(reg.R, reg.t, frame.t);
+  assert.ok(Math.abs(global.delta[0] - td[0]) > 0.01);
+  near(global.distance, dev.distance, 1e-12, '3D distance');
+  near(global.angle, dev.angle, 1e-9, 'total angle');
+});
